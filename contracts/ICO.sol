@@ -8,24 +8,25 @@ import "@openzeppelin/contracts/utils/Address.sol";
 
 contract ICO is Ownable {
     using Address for address payable;
-    // The token being sold
+    /// The token being sold
     IERC20Metadata private _token;
 
-    // How many token units a buyer gets per wei
+    /// value in wei per token
     uint256 private _rate;
 
-    // Time when the ico finish
+    /// start time of ICO
     uint256 private _releaseTime;
 
-    //2 weeks time
+    ///2 weeks time
     uint256 private _2weeks = 2 * 1 weeks;
 
-    //OwnerSupply of Froggies ERC20 address
+    ///OwnerSupply of Froggies ERC20 address
     address private _ownerSupplyAddress;
 
     ///Event
-    event boughtTokens(address indexed recipient, uint256 amount);
-    event withdrew(address indexed owner, uint256 amount);
+    event BoughtTokens(address indexed recipient, uint256 amount);
+    event Withdrew(address indexed owner, uint256 amount);
+    event Refund(address indexed sender, uint256 refund);
 
     /// Constructor
     constructor(
@@ -41,27 +42,43 @@ contract ICO is Ownable {
     }
 
     receive() external payable {
+        uint256 refund;
         require(msg.value >= 1 gwei, "ICO: You must buy as least 1 gwei");
-        require(msg.value >= 10 gwei, "ICO: You cannot buy more than 10 Ether");
+        require(msg.value >= 10 gwei, "ICO: You cannot buy more than 10 gwei");
         require(_releaseTime + _2weeks >= block.timestamp, "ICO: Too late the offer has ended");
-        _buyTokens(msg.sender, msg.value);
+        if (_ownerSupplyAddress.balance <= msg.value) {
+            refund = msg.value - _ownerSupplyAddress.balance;
+            payable(msg.sender).sendValue(refund);
+        }
+        uint256 amount = msg.value - refund;
+        _buyTokens(msg.sender, amount);
+        emit BoughtTokens(msg.sender, amount);
     }
 
     function buyTokens() public payable {
         require(msg.value >= 1 gwei, "ICO: You must buy as least 1 gwei");
-        require(msg.value <= 10 gwei, "ICO: You cannot buy more than 10 Ether");
+        require(msg.value <= 10 gwei, "ICO: You cannot buy more than 10 gwei");
         require(_releaseTime + _2weeks >= block.timestamp, "ICO: Too late the offer has ended");
-        _buyTokens(msg.sender, msg.value);
+        uint256 refund;
+        if (_ownerSupplyAddress.balance <= msg.value) {
+            refund = msg.value - _ownerSupplyAddress.balance;
+            payable(msg.sender).sendValue(refund);
+            emit Refund(msg.sender, refund);
+        }
+        uint256 amount = msg.value - refund;
+        _buyTokens(msg.sender, amount);
+        emit BoughtTokens(msg.sender, amount);
     }
 
     function withdraw() public payable onlyOwner {
         require(address(this).balance > 0, "ICO: 0 balance nobody bought your shitcoin");
         require(_releaseTime + _2weeks <= block.timestamp, "ICO: You have to wait till the end of the ICO");
-        payable(owner()).sendValue(address(this).balance);
-        emit withdrew(owner(), address(this).balance);
+        uint256 jackpot = address(this).balance;
+        payable(msg.sender).sendValue(jackpot);
+        emit Withdrew(msg.sender, jackpot);
     }
 
-    //getters
+    /// getters
 
     function OwnerSupplyAddress() public view returns (address) {
         return _ownerSupplyAddress;
@@ -94,6 +111,6 @@ contract ICO is Ownable {
     function _buyTokens(address recipient, uint256 amount) private {
         uint256 tokenAmount = _rate * amount;
         _token.transferFrom(_ownerSupplyAddress, recipient, tokenAmount);
-        emit boughtTokens(recipient, amount);
+        emit BoughtTokens(recipient, amount);
     }
 }

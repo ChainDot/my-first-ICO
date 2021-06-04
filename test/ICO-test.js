@@ -39,6 +39,21 @@ describe('ICO', async function () {
   });
 
   describe('buyTokens', function () {
+    it('Should change the wei balance of the contract when someone buyTokens', async function () {
+      await ico.connect(alice).buyTokens({ value: 2 * GWEI });
+      await ico.connect(bob).buyTokens({ value: 2 * GWEI });
+      expect(await ico.connect(alice).weiFundsRaised()).to.equal(4 * GWEI);
+    });
+    it('Should emit when use buyTokens()', async function () {
+      await expect(ico.connect(bob).buyTokens({ value: 2 * GWEI }))
+        .to.emit(ico, 'BoughtTokens')
+        .withArgs(bob.address, 2 * GWEI);
+    });
+    it('Should emit when use buyTokens()', async function () {
+      await expect(ico.connect(bob).buyTokens({ value: 2 * GWEI }))
+        .to.emit(ico, 'BoughtTokens')
+        .withArgs(bob.address, 2 * GWEI);
+    });
     it('Should revert if sender try to buy less than 1 gwei', async function () {
       await expect(ico.connect(alice).buyTokens({ value: 10 ** 8 })).to.be.revertedWith(
         'ICO: You must buy as least 1 gwei'
@@ -46,7 +61,7 @@ describe('ICO', async function () {
     });
     it('Should revert if sender send more than 10 gwei', async function () {
       await expect(ico.connect(charlie).buyTokens({ value: 11 * RATE })).to.be.revertedWith(
-        'ICO: You cannot buy more than 10 Ether'
+        'ICO: You cannot buy more than 10 gwei'
       );
     });
     it('Should revert if you try to buyTokens once the ICO has endend', async function () {
@@ -55,14 +70,24 @@ describe('ICO', async function () {
         'ICO: Too late the offer has ended'
       );
     });
-    it('', async function () {});
+    it('Should revert', async function () {});
   });
 
   describe('withdraw', function () {
-    it('should withdraw the wei balance of ICO to the owner address of the ICO', async function () {
+    it('should set to zero the balance of ico address when owner withdraw', async function () {
       await ico.connect(alice).buyTokens({ value: 2 * GWEI });
       await ethers.provider.send('evm_increaseTime', [2 * WEEKS]);
-      await expect(ico.withdraw({ to: ownerICO.address, value: 2 * GWEI }).to.changeEtherBalance(ownerICO, 2 * GWEI));
+      expect(await ico.connect(ownerICO).weiFundsRaised()).to.equal(2 * GWEI);
+      await ico.connect(ownerICO).withdraw();
+      expect(await ico.connect(ownerICO).weiFundsRaised()).to.equal(0);
+    });
+    it('should emit event withdrew when owner withdraw', async function () {
+      await ico.connect(bob).buyTokens({ value: 2 * GWEI });
+      await ethers.provider.send('evm_increaseTime', [2 * WEEKS]);
+      expect(await ico.connect(ownerICO).weiFundsRaised()).to.equal(2 * GWEI);
+      await expect(ico.connect(ownerICO).withdraw())
+        .to.emit(ico, 'Withdrew')
+        .withArgs(ownerICO.address, 2 * GWEI);
     });
     it('Should revert if owner have zero balance in contract', async function () {
       await expect(ico.connect(ownerICO).withdraw()).to.be.revertedWith('ICO: 0 balance nobody bought your shitcoin');
@@ -73,30 +98,33 @@ describe('ICO', async function () {
         'ICO: You have to wait till the end of the ICO'
       );
     });
+    it('Should revert if you are not the owner and you try to withdraw', async function () {
+      await expect(ico.connect(bob).withdraw()).to.be.revertedWith('Ownable: caller is not the owner');
+    });
   });
 
   describe('getters', function () {
-    it('Should show the owner address of Froggies contract', async function () {
+    it('shows the owner address of Froggies contract', async function () {
       expect(await ico.connect(bob).OwnerSupplyAddress()).to.equal(ownerFroggies.address);
     });
-    it('Should show address of contract token Froggies', async function () {
+    it('shows address of contract token Froggies', async function () {
       expect(await ico.connect(bob).displayFroggiesTokenAddress()).to.equal(froggies.address);
     });
-    it('Should convert amount of wei to number of token', async function () {
+    it('converts amount of wei to number of token', async function () {
       expect(await ico.connect(bob).numberOfTokens(2 * GWEI)).to.equal(2);
     });
-    it('Should show total amount of wei raised', async function () {
+    it('shows total amount of wei raised', async function () {
       await ico.connect(bob).buyTokens({ value: 2 * GWEI });
       expect(await ico.connect(dev).weiFundsRaised()).to.equal(2 * GWEI);
     });
-    it('Should show total token sold', async function () {
+    it('shows total token sold', async function () {
       await ico.connect(bob).buyTokens({ value: 3 * GWEI });
       expect(await ico.connect(bob).totalTokenSold()).to.equal(3);
     });
-    it('Should show rate per token', async function () {
+    it('shows rate per token', async function () {
       expect(await ico.connect(bob).rate()).to.equal(RATE);
     });
-    it('Should show time remaining in secondes', async function () {
+    it('shows time remaining in secondes', async function () {
       expect(await ico.connect(bob).releaseTime()).to.equal(2 * WEEKS - 1);
     });
   });

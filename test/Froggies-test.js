@@ -5,7 +5,7 @@ describe('Froggies', async function () {
   let dev, owner, Froggies, froggies;
   const NAME = 'Froggies';
   const SYMBOL = 'FRG';
-  const INITIAL_SUPPLY = ethers.utils.parseEther('100');
+  const INITIAL_SUPPLY = ethers.utils.parseEther('10000');
   beforeEach(async function () {
     [dev, owner] = await ethers.getSigners();
     Froggies = await ethers.getContractFactory('Froggies');
