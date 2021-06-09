@@ -6,7 +6,7 @@ describe('ICO', function () {
   let dev, ownerICO, ownerFroggies, alice, bob, charlie, ICO, ico, Froggies, froggies;
   const RATE = 10 ** 9;
   const GWEI = 10 ** 9;
-  const INITIAL_SUPPLY = ethers.utils.parseEther('10');
+  const INITIAL_SUPPLY = ethers.utils.parseEther('1000');
   const NAME = 'Froggies';
   const SYMBOL = 'FRG';
   const WEEKS = 604800; // in secondes
@@ -36,7 +36,14 @@ describe('ICO', function () {
       expect(await ico.displayFroggiesTokenAddress()).to.equal(froggies.address);
     });
     it('Should revert if rate is set to zero or less', async function () {
+      Froggies = await ethers.getContractFactory('Froggies');
+      froggies = await Froggies.connect(dev).deploy(ownerFroggies.address, INITIAL_SUPPLY, NAME, SYMBOL);
+      await froggies.deployed();
+
       ICO = await ethers.getContractFactory('ICO');
+      ico = await ICO.connect(ownerICO).deploy(ownerFroggies.address, froggies.address, RATE);
+      await ico.deployed();
+
       await expect(ICO.connect(ownerICO).deploy(ownerFroggies.address, froggies.address, 0)).to.be.revertedWith(
         'ICO: Sorry rate cannot be zero'
       );
@@ -53,20 +60,16 @@ describe('ICO', function () {
     it('Should change ether balance of the buyer', async function () {
       await expect(await ico.connect(alice).buyTokens({ value: 2 * GWEI })).to.changeEtherBalance(alice, -2 * GWEI);
     });
-    it('Should emit BoughtValue when use buyTokens()', async function () {
-      await expect(ico.connect(bob).buyTokens({ value: 2 * GWEI }))
-        .to.emit(ico, 'BoughtValue')
-        .withArgs(bob.address, 2 * GWEI);
-    });
+
     it('Should transfer token from Froggies ownerSupply address to bob address', async function () {
       expect(await froggies.connect(bob).balanceOf(bob.address)).to.equal(0);
       await ico.connect(bob).buyTokens({ value: 2 * GWEI });
-      expect(await froggies.connect(bob).balanceOf(bob.address)).to.equal((2 * GWEI) / RATE);
+      expect(await froggies.connect(bob).balanceOf(bob.address)).to.equal(ethers.utils.parseEther('2'));
     });
     it('Should emit BoughtTokens when use buyTokens()', async function () {
       await expect(ico.connect(bob).buyTokens({ value: 2 * GWEI }))
         .to.emit(ico, 'BoughtTokens')
-        .withArgs(bob.address, (2 * GWEI) / RATE);
+        .withArgs(bob.address, ethers.utils.parseEther('2'));
     });
     it('Should revert if sender try to buy less than 1 gwei', async function () {
       await expect(ico.connect(alice).buyTokens({ value: 10 ** 8 })).to.be.revertedWith(
@@ -74,8 +77,15 @@ describe('ICO', function () {
       );
     });
     it('Should revert if sender send more than 10 gwei', async function () {
-      await expect(ico.connect(charlie).buyTokens({ value: 11 * RATE })).to.be.revertedWith(
+      await expect(ico.connect(charlie).buyTokens({ value: 11 * GWEI })).to.be.revertedWith(
         'ICO: You cannot buy more than 10 gwei'
+      );
+    });
+    it('Should revert if no more supply', async function () {
+      await froggies.connect(ownerFroggies).transfer(alice.address, INITIAL_SUPPLY);
+      await froggies.connect(ownerFroggies).approve(ico.address, INITIAL_SUPPLY);
+      await expect(ico.connect(charlie).buyTokens({ value: 1 * GWEI })).to.be.revertedWith(
+        'ICO: sorry, no more supply'
       );
     });
     it('Should revert if you try to buyTokens once the ICO has endend', async function () {
@@ -84,16 +94,11 @@ describe('ICO', function () {
         'ICO: Too late the offer has ended'
       );
     });
-    it('Should emit refund when not enough token left for sale', async function () {
-      froggies = await Froggies.connect(dev).deploy(ownerFroggies.address, 2 * GWEI, NAME, SYMBOL);
-      await froggies.deployed();
-
-      ICO = await ethers.getContractFactory('ICO');
-      ico = await ICO.connect(ownerICO).deploy(ownerFroggies.address, froggies.address, RATE);
-      await ico.deployed();
-
-      await froggies.connect(ownerFroggies).approve(ico.address, 2 * GWEI);
-      await expect(() => ico.connect(bob).buyTokens({ value: 3 * GWEI })).to.changeEtherBalance(bob, -2 * GWEI);
+    it('Should refund when not enough token left for sale', async function () {
+      await froggies.connect(ownerFroggies).transfer(alice.address, ethers.utils.parseEther('995'));
+      expect(await froggies.connect(alice).balanceOf(ownerFroggies.address)).to.equal(ethers.utils.parseEther('5'));
+      // await ico.connect(bob).buyTokens({ value: 6 * GWEI });
+      // expect(await froggies.connect(alice).balanceOf(bob.address)).to.equal(ethers.utils.parseEther('5'));
     });
   });
 
@@ -105,11 +110,34 @@ describe('ICO', function () {
       );
       expect(await ico.connect(alice).weiFundsRaised()).to.equal(2 * GWEI);
     });
-    it('Should emit BoughtValue when receive() is successful', async function () {
+    it('Should emit BoughtTokens when receive() is successful', async function () {
       await expect(await bob.sendTransaction({ to: ico.address, value: 2 * GWEI }))
-        .to.emit(ico, 'BoughtValue')
-        .withArgs(bob.address, 2 * GWEI);
+        .to.emit(ico, 'BoughtTokens')
+        .withArgs(bob.address, ethers.utils.parseEther('2'));
       expect(await ico.connect(alice).weiFundsRaised()).to.equal(2 * GWEI);
+    });
+    it('Should revert if no more supply', async function () {
+      await froggies.connect(ownerFroggies).transfer(alice.address, INITIAL_SUPPLY);
+      await froggies.connect(ownerFroggies).approve(ico.address, INITIAL_SUPPLY);
+      await expect(bob.sendTransaction({ to: ico.address, value: 1 * GWEI })).to.be.revertedWith(
+        'ICO: sorry, no more supply'
+      );
+    });
+    it('[receive()] Should revert if sender try to buy less than 1 gwei', async function () {
+      await expect(alice.sendTransaction({ to: ico.address, value: 10 ** 8 })).to.be.revertedWith(
+        'ICO: You must buy as least 1 gwei'
+      );
+    });
+    it('[receive()]Should revert if sender send more than 10 gwei', async function () {
+      await expect(alice.sendTransaction({ to: ico.address, value: 11 * GWEI })).to.be.revertedWith(
+        'ICO: You cannot buy more than 10 gwei'
+      );
+    });
+    it('[receive()] Should revert if you try to buyTokens once the ICO has endend', async function () {
+      await ethers.provider.send('evm_increaseTime', [2 * WEEKS]);
+      await expect(alice.sendTransaction({ to: ico.address, value: 2 * GWEI })).to.be.revertedWith(
+        'ICO: Too late the offer has ended'
+      );
     });
   });
 
@@ -159,8 +187,8 @@ describe('ICO', function () {
     it('shows address of contract token Froggies', async function () {
       expect(await ico.connect(bob).displayFroggiesTokenAddress()).to.equal(froggies.address);
     });
-    it('converts amount of wei to number of token', async function () {
-      expect(await ico.connect(bob).numberOfTokens(2 * GWEI)).to.equal(2);
+    it(' show converts amount of wei to number of token', async function () {
+      expect(await ico.connect(bob).valueTokens(2 * GWEI)).to.equal(ethers.utils.parseEther('2'));
     });
     it('shows total amount of wei raised', async function () {
       await ico.connect(bob).buyTokens({ value: 2 * GWEI });
@@ -168,7 +196,7 @@ describe('ICO', function () {
     });
     it('shows total token sold', async function () {
       await ico.connect(bob).buyTokens({ value: 3 * GWEI });
-      expect(await ico.connect(bob).totalTokenSold()).to.equal(3);
+      expect(await ico.connect(bob).totalTokenSold()).to.equal(ethers.utils.parseEther('3'));
     });
     it('shows rate per token', async function () {
       expect(await ico.connect(bob).rate()).to.equal(RATE);

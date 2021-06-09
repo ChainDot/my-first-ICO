@@ -34,7 +34,6 @@ contract ICO is Ownable {
 
     //Event
     event BoughtTokens(address indexed recipient, uint256 tokenAmount);
-    event BoughtValue(address indexed recipient, uint256 amount);
     event Withdrew(address indexed owner, uint256 amount);
     event Refund(address indexed sender, uint256 refund);
 
@@ -58,7 +57,6 @@ contract ICO is Ownable {
         require(_releaseTime + _twoWeeks >= block.timestamp, "ICO: Too late the offer has ended");
 
         _buyTokens(msg.sender, msg.value);
-        emit BoughtValue(msg.sender, msg.value);
     }
 
     /// @notice transfer the deposit wei amount into the ICO contract address and transfer amount of token to sender account.
@@ -68,7 +66,6 @@ contract ICO is Ownable {
         require(_releaseTime + _twoWeeks >= block.timestamp, "ICO: Too late the offer has ended");
 
         _buyTokens(msg.sender, msg.value);
-        emit BoughtValue(msg.sender, msg.value);
     }
 
     /// @notice only owner can withdraw the total wei amount from the ICO contract address.
@@ -98,9 +95,9 @@ contract ICO is Ownable {
         return _token;
     }
 
-    /// @notice Returns the number of token compare to the amount entered
-    function numberOfTokens(uint256 weiAmount) public view returns (uint256) {
-        return weiAmount / _rate;
+    /// @notice Returns the number of token balance
+    function valueTokens(uint256 weiAmount) public view returns (uint256) {
+        return (weiAmount / _rate) * 10**18;
     }
 
     /// @notice Returns the balance of wei in the ICO contract
@@ -110,7 +107,7 @@ contract ICO is Ownable {
 
     /// @notice Returns the balance equivalent in token in the ICO contract
     function totalTokenSold() public view returns (uint256) {
-        return numberOfTokens(weiFundsRaised());
+        return valueTokens(weiFundsRaised());
     }
 
     /// @notice Returns price per token
@@ -126,15 +123,16 @@ contract ICO is Ownable {
     //Private
 
     function _buyTokens(address recipient, uint256 amount) private {
-        uint256 tokenAmount = amount / _rate;
+        uint256 convert = (amount / _rate) * (10**18);
         uint256 refund;
+        require(ownerTokenSupply() != 0, "ICO: sorry, no more supply");
 
-        if (ownerTokenSupply() < tokenAmount) {
-            refund = tokenAmount - ownerTokenSupply();
-            uint256 refundWei = refund * _rate;
-            payable(recipient).sendValue(refundWei);
+        if (ownerTokenSupply() < convert) {
+            refund = ownerTokenSupply() - convert;
+            payable(recipient).sendValue((refund / 10**18) * _rate);
         }
-        _token.transferFrom(_ownerSupplyAddress, recipient, tokenAmount);
-        emit BoughtTokens(recipient, tokenAmount);
+        convert -= refund;
+        _token.transferFrom(_ownerSupplyAddress, recipient, convert);
+        emit BoughtTokens(recipient, convert);
     }
 }
