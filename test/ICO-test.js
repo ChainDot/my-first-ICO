@@ -94,11 +94,14 @@ describe('ICO', function () {
         'ICO: Too late the offer has ended'
       );
     });
+
+    // I have some issues with the payable refund, either my solidity code is wrong or my test is wrong or maybe both.
+    // Error: Transaction reverted and Hardhat couldn't infer the reason. Please report this to help us improve Hardhat.
     it('Should refund when not enough token left for sale', async function () {
       await froggies.connect(ownerFroggies).transfer(alice.address, ethers.utils.parseEther('995'));
-      expect(await froggies.connect(alice).balanceOf(ownerFroggies.address)).to.equal(ethers.utils.parseEther('5'));
-      // await ico.connect(bob).buyTokens({ value: 6 * GWEI });
-      // expect(await froggies.connect(alice).balanceOf(bob.address)).to.equal(ethers.utils.parseEther('5'));
+      expect(await ico.weiFundsRaised()).to.equal(0);
+      await expect(await ico.connect(bob).buyTokens({ value: 6 * GWEI })).to.changeEtherBalance(bob, -5 * GWEI);
+      expect(await ico.weiFundsRaised()).to.equal(5 * GWEI);
     });
   });
 

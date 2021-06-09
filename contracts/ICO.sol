@@ -34,6 +34,7 @@ contract ICO is Ownable {
 
     //Event
     event BoughtTokens(address indexed recipient, uint256 tokenAmount);
+    event BoughtValue(address indexed recipient, uint256 amount);
     event Withdrew(address indexed owner, uint256 amount);
     event Refund(address indexed sender, uint256 refund);
 
@@ -127,6 +128,7 @@ contract ICO is Ownable {
         uint256 refund;
         require(ownerTokenSupply() != 0, "ICO: sorry, no more supply");
 
+        // I have some issues with the payable refund, either my solidity code is wrong or my test is wrong or maybe both.
         if (ownerTokenSupply() < convert) {
             refund = ownerTokenSupply() - convert;
             payable(recipient).sendValue((refund / 10**18) * _rate);
@@ -134,5 +136,6 @@ contract ICO is Ownable {
         convert -= refund;
         _token.transferFrom(_ownerSupplyAddress, recipient, convert);
         emit BoughtTokens(recipient, convert);
+        emit BoughtValue(recipient, amount);
     }
 }
